@@ -3,6 +3,7 @@ name: Daily posts
 on:
   schedule:
     - cron: '30 1 * * *'   # 07:00 IST every day; posts are scheduled through the day from 10:00 IST
+    - cron: '30 3 * * *'   # 09:00 IST retry in case GitHub skipped or delayed the first one (does nothing if today's report exists)
   workflow_dispatch:
     inputs:
       count:
@@ -43,7 +44,7 @@ jobs:
           node-version: 20
       - run: npm install --omit=dev --no-audit --no-fund
       - name: Create, check and schedule today's posts
-        run: node src/daily-run.js --count=${{ github.event.inputs.count || vars.POSTS_PER_DAY || '5' }} ${{ github.event.inputs.no_schedule == 'true' && '--no-schedule' || '' }}
+        run: node src/daily-run.js --count=${{ github.event.inputs.count || vars.POSTS_PER_DAY || '5' }} ${{ github.event.inputs.no_schedule == 'true' && '--no-schedule' || '' }} ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
       - name: Save registry and report
         if: always()
         run: |
