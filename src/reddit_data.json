@@ -1,0 +1,136 @@
+{
+  "timestamp": "2026-10-02T12:36:02.657Z",
+  "summary": {
+    "totalPosts": 6,
+    "dateRange": "past week",
+    "minEngagement": 1000,
+    "subreddits": [
+      "india",
+      "iphone",
+      "android",
+      "gadgets",
+      "technology",
+      "samsung"
+    ]
+  },
+  "insights": {
+    "topicFrequency": {
+      "Samsung": 3,
+      "specs": 1,
+      "iPhone": 2,
+      "phone": 3,
+      "battery": 1,
+      "Pixel": 1,
+      "camera": 1,
+      "OnePlus": 1,
+      "smartphone": 1
+    },
+    "trendingTopics": [
+      {
+        "topic": "Samsung",
+        "count": 3
+      },
+      {
+        "topic": "phone",
+        "count": 3
+      },
+      {
+        "topic": "iPhone",
+        "count": 2
+      },
+      {
+        "topic": "specs",
+        "count": 1
+      },
+      {
+        "topic": "battery",
+        "count": 1
+      },
+      {
+        "topic": "Pixel",
+        "count": 1
+      },
+      {
+        "topic": "camera",
+        "count": 1
+      },
+      {
+        "topic": "OnePlus",
+        "count": 1
+      },
+      {
+        "topic": "smartphone",
+        "count": 1
+      }
+    ],
+    "insights": [
+      {
+        "topic": "Samsung Galaxy S25 Ultra specs leaked: New processor benchmark",
+        "engagement": 3057,
+        "type": "high_engagement"
+      }
+    ]
+  },
+  "posts": [
+    {
+      "subreddit": "r/samsung",
+      "title": "Samsung Galaxy S25 Ultra specs leaked: New processor benchmark",
+      "score": 2145,
+      "comments_count": 456,
+      "url": "https://reddit.com/r/samsung/comments/example4",
+      "author": "techleaker2024",
+      "created_at": "2024-09-25T09:15:00Z",
+      "top_comment": "Those benchmark numbers are impressive. Snapdragon X Gen 2 is a monster."
+    },
+    {
+      "subreddit": "r/android",
+      "title": "Why I switched from iPhone to Samsung Galaxy S25",
+      "score": 1890,
+      "comments_count": 340,
+      "url": "https://reddit.com/r/android/comments/example2",
+      "author": "androidfan456",
+      "created_at": "2024-09-27T15:45:00Z",
+      "top_comment": "The customization options on Android are unbeatable. Samsung DeX alone is worth it."
+    },
+    {
+      "subreddit": "r/iphone",
+      "title": "iPhone 16 battery drains so fast after update",
+      "score": 1250,
+      "comments_count": 500,
+      "url": "https://reddit.com/r/iphone/comments/example1",
+      "author": "phoneuser123",
+      "created_at": "2024-09-28T10:30:00Z",
+      "top_comment": "Try disabling Background App Refresh and location services. That fixed it for me completely."
+    },
+    {
+      "subreddit": "r/gadgets",
+      "title": "Google Pixel 10 camera quality is insane",
+      "score": 1567,
+      "comments_count": 290,
+      "url": "https://reddit.com/r/gadgets/comments/example3",
+      "author": "photoguy789",
+      "created_at": "2024-09-26T12:20:00Z",
+      "top_comment": "AI processing on Pixel is years ahead of the competition. Night mode is unreal."
+    },
+    {
+      "subreddit": "r/technology",
+      "title": "OnePlus 13 vs Samsung Galaxy S25: Detailed comparison",
+      "score": 1456,
+      "comments_count": 278,
+      "url": "https://reddit.com/r/technology/comments/example5",
+      "author": "techreviewpro",
+      "created_at": "2024-09-24T14:30:00Z",
+      "top_comment": "OnePlus still has the fastest charging and cleaner software."
+    },
+    {
+      "subreddit": "r/india",
+      "title": "Best smartphones under 30,000 in India - October 2024",
+      "score": 1123,
+      "comments_count": 201,
+      "url": "https://reddit.com/r/india/comments/example6",
+      "author": "budgetphone_guru",
+      "created_at": "2024-09-23T11:00:00Z",
+      "top_comment": "Poco X7 Pro offers amazing value at that price point."
+    }
+  ]
+}

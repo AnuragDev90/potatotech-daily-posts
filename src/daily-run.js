@@ -1,0 +1,189 @@
+// Daily orchestrator for the cloud (GitHub Actions) or local use:
+//   1. discover today's topics (smartphones / Tesla and tech / offers) from Google News headlines
+//   2. generate the posts with src/pipeline-multi-niche.js (always as drafts)
+//   3. gate each draft: SEO audit score, length, YouTube embed
+//   4. schedule the ones that pass (status=future, 45+ minutes apart, spread through the day); the rest stay drafts
+//   5. write reports/YYYY-MM-DD.md (and the GitHub job summary)
+// Usage: node src/daily-run.js [--count=5] [--min-score=100] [--no-schedule] [--discover-only]
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+const { fetchNews } = require('./topic-discovery');
+
+const arg = (n, d) => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3) ?? d;
+const ROOT = path.join(__dirname, '..');
+const COUNT = Math.min(6, Math.max(1, parseInt(arg('count', process.env.POSTS_PER_DAY || '5'))));
+const MIN_SCORE = parseInt(arg('min-score', process.env.MIN_SCORE || '100'));
+const MIN_WORDS = 1500;
+const GAP_MIN = 45;
+const NO_SCHEDULE = process.argv.includes('--no-schedule');
+const DISCOVER_ONLY = process.argv.includes('--discover-only');
+const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, OPENAI_API_KEY } = process.env;
+const WP = `${WORDPRESS_SITE}/wp-json/wp/v2`;
+const AUTH = { Authorization: 'Basic ' + Buffer.from(`${WORDPRESS_USERNAME}:${WORDPRESS_PASSWORD}`).toString('base64') };
+const MODEL = process.env.MULTI_NICHE_MODEL || 'gpt-4o-mini';
+const log = m => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
+const today = new Date().toISOString().slice(0, 10);
+
+const DESKS = {
+  mobile: {
+    want: 0, label: 'smartphones launched, leaked or discounted in India',
+    queries: ['smartphone launch India', 'upcoming phones India', 'phone price cut India', 'Samsung Galaxy India launch', 'iPhone India price', 'OnePlus Vivo OPPO Xiaomi realme India launch', 'phone leaks specs']
+  },
+  tech: {
+    want: 0, label: 'Tesla, electric vehicles and consumer tech (gadgets, Apple, chips, software); prefer Tesla/EV stories with an India angle when there are any',
+    queries: ['Tesla', 'Tesla India', 'electric vehicle India launch', 'Apple launch India price', 'new gadget launch India', 'laptop launch India', 'tech India']
+  },
+  offers: {
+    want: 0, label: 'shopping sales and phone/gadget offers in India (Amazon, Flipkart, bank offers, festive sales)',
+    queries: ['Flipkart sale phone offers', 'Amazon Great Indian Festival offers', 'smartphone discount India bank offer', 'Diwali sale deals India phones', 'iPhone price drop Flipkart Amazon']
+  }
+};
+
+function splitCount(n) { // offers 1 (2 when n = 6), mobile and tech share the rest
+  const offers = n >= 6 ? 2 : 1, rest = n - offers, mobile = Math.ceil(rest / 2);
+  return { mobile, tech: rest - mobile, offers };
+}
+
+async function chat(messages, maxTokens = 3000) {
+  for (let i = 1; i <= 3; i++) {
+    try {
+      const r = await axios.post('https://api.openai.com/v1/chat/completions', { model: MODEL, messages, temperature: 0.3, max_tokens: maxTokens, response_format: { type: 'json_object' } },
+        { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, timeout: 120000 });
+      return JSON.parse(r.data.choices[0].message.content);
+    } catch (e) { if (i === 3) throw e; await new Promise(r => setTimeout(r, 4000 * i)); }
+  }
+}
+
+async function existingTitles() {
+  const out = [];
+  for (let page = 1; page <= 5; page++) {
+    try {
+      const r = await axios.get(`${WP}/posts`, { params: { per_page: 100, page, status: 'publish,draft,pending,future', _fields: 'title,date' }, headers: AUTH, timeout: 30000 });
+      out.push(...r.data.map(p => p.title.rendered));
+      if (r.data.length < 100) break;
+    } catch { break; }
+  }
+  return out;
+}
+
+async function discover(desk, want, titles) {
+  const seen = new Set(), heads = [];
+  for (const q of DESKS[desk].queries) for (const n of await fetchNews(q, 3, 12)) {
+    const k = n.title.toLowerCase().slice(0, 60);
+    if (n.title && !seen.has(k)) { seen.add(k); heads.push(n); }
+  }
+  log(`${desk}: ${heads.length} fresh headlines`);
+  if (heads.length < 6) return [];
+  const list = heads.slice(0, 90).map((h, i) => `${i}. ${h.title} (${h.source}, ${h.date})`).join('\n');
+  const out = await chat([
+    { role: 'system', content: 'You are an editor choosing article topics from news headlines for an Indian tech blog.' },
+    { role: 'user', content: `Desk: ${DESKS[desk].label}.\nGroup headlines about the SAME specific story or product and propose up to ${want + 2} distinct topics, strongest first (biggest, most searched, useful to readers in India).\nHARD RULES: no politics, crime, celebrity, sports, lawsuits or sensitive health; nothing about named private individuals; every topic needs a genuine India angle (price, availability, offers) or a clear tech angle. Each topic needs at least 4 headlines from at least 2 different outlets. Do not repeat anything already on the site: ${JSON.stringify(titles.slice(0, 120))}\n\n${list}\n\nReturn JSON {"topics":[{"keyword":"2-5 lowercase words an Indian reader would search","niche":"${desk === 'offers' ? 'flipkart or amazonsale' : desk === 'tech' ? 'tech' : 'mobile'}","headline_ids":[...],"angle":"2-3 sentences: what the reader needs to know, and which claims are leaks or unconfirmed"}]}` }
+  ]);
+  return (out.topics || []).map(t => {
+    const hs = [...new Set(t.headline_ids || [])].map(i => heads[i]).filter(Boolean).slice(0, 8);
+    return { t, hs, outlets: new Set(hs.map(h => h.source)).size };
+  }).filter(x => x.t.keyword && x.hs.length >= 4 && x.outlets >= 2).slice(0, want).map(({ t, hs }) => ({
+    niche: desk === 'offers' ? (t.niche === 'flipkart' ? 'flipkart' : 'amazonsale') : desk === 'tech' ? 'tech' : 'mobile',
+    keyword: String(t.keyword).toLowerCase().replace(/\s+/g, ' ').trim(), days: 3,
+    queries: [String(t.keyword)],
+    notes: hs.map(h => ({ title: h.title, link: h.link, source: h.source })),
+    angle: `${t.angle || ''} Use only facts present in the supplied headlines. Label leaks, rumours and tipster claims as unconfirmed and attribute them to the outlet. Never state an unannounced price or date as official. Do not invent specifications, benchmarks or battery hours.`
+  }));
+}
+
+function run(script, args) {
+  const r = spawnSync('node', [path.join(__dirname, script), ...args], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  process.stdout.write(r.stdout || ''); process.stderr.write(r.stderr || '');
+  return r.status;
+}
+
+// IST (UTC+5:30) slots: start 50 min from now (not before 10:00 IST), then every 150 min, skipping 23:00-09:00 IST, keeping 45 min from already-scheduled posts
+async function makeSlots(n) {
+  let taken = [];
+  try { taken = (await axios.get(`${WP}/posts`, { params: { status: 'future', per_page: 100, _fields: 'date_gmt' }, headers: AUTH })).data.map(p => Date.parse(p.date_gmt + 'Z')); } catch { /* none */ }
+  const IST = 330 * 60000, istHour = ms => new Date(ms + IST).getUTCHours() + new Date(ms + IST).getUTCMinutes() / 60;
+  let t = Date.now() + 50 * 60000; const slots = [];
+  const nextMorning = ms => { const d = new Date(ms + IST); d.setUTCHours(10, 0, 0, 0); let r = d.getTime() - IST; if (r < ms) r += 86400000; return r; };
+  while (slots.length < n) {
+    if (istHour(t) < 10 || istHour(t) >= 23) t = nextMorning(t);
+    if (taken.some(x => Math.abs(x - t) < GAP_MIN * 60000)) { t += GAP_MIN * 60000; continue; }
+    slots.push(t); taken.push(t); t += 150 * 60000;
+  }
+  return slots;
+}
+
+async function main() {
+  for (const k of ['OPENAI_API_KEY', 'UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} is not set`);
+  const mix = splitCount(COUNT);
+  log(`Plan: ${COUNT} posts (mobile ${mix.mobile}, tech ${mix.tech}, offers ${mix.offers}); gate: score >= ${MIN_SCORE}, ${MIN_WORDS}+ words, YouTube embed`);
+  const titles = await existingTitles();
+  const topics = [];
+  for (const d of Object.keys(mix)) { try { topics.push(...await discover(d, mix[d], titles)); } catch (e) { log(`${d}: discovery failed: ${e.message}`); } }
+  const toks = k => new Set(k.split(' ').filter(w => w.length > 2 && !['price', 'india', 'launch', 'details', 'features', 'best'].includes(w)));
+  for (let i = topics.length - 1; i >= 0; i--) { // drop near-duplicate topics across desks (keep the first)
+    const a = toks(topics[i].keyword);
+    if (topics.slice(0, i).some(o => { const b = toks(o.keyword); const common = [...a].filter(w => b.has(w)).length; return common && common >= Math.min(a.size, b.size) * 0.5; })) { log(`dropping near-duplicate topic "${topics[i].keyword}"`); topics.splice(i, 1); }
+  }
+  log(`Topics: ${topics.map(t => `${t.niche}/${t.keyword}`).join(' | ') || 'none'}`);
+  const topicsFile = path.join(ROOT, `daily_topics_${today}.json`);
+  fs.writeFileSync(topicsFile, JSON.stringify(topics, null, 2));
+  if (DISCOVER_ONLY) return;
+  if (!topics.length) throw new Error('no usable topics found today');
+
+  const resultsFile = path.join(ROOT, 'multi_niche_results.json');
+  try { fs.unlinkSync(resultsFile); } catch { /* none */ }
+  run('pipeline-multi-niche.js', [`--topics-file=${topicsFile}`, '--depth=deep', '--status=draft']);
+  let results = [];
+  try { results = JSON.parse(fs.readFileSync(resultsFile, 'utf8')); } catch { /* none */ }
+  const made = results.filter(r => r.post_id);
+  log(`Generated ${made.length} drafts; ${results.length - made.length} skipped or failed`);
+
+  let audits = [];
+  if (made.length) {
+    run('seo-audit.js', [`--ids=${made.map(r => r.post_id).join(',')}`]);
+    try { audits = JSON.parse(fs.readFileSync(path.join(ROOT, 'audits', 'audit_results.json'), 'utf8')); } catch { /* none */ }
+  }
+  const rows = [];
+  for (const r of made) {
+    const a = audits.find(x => x.id === r.post_id);
+    const problems = [];
+    if (!a) problems.push('audit did not run');
+    else {
+      if (a.score < MIN_SCORE) problems.push(`SEO ${a.score}/${MIN_SCORE}: ${a.failed.slice(0, 3).map(f => f.check).join('; ')}`);
+      if (a.words < MIN_WORDS) problems.push(`only ${a.words} words`);
+    }
+    try {
+      const html = (await axios.get(`${WP}/posts/${r.post_id}?context=edit`, { headers: AUTH, timeout: 30000 })).data.content.raw;
+      if (!/youtube(-nocookie)?\.com\/embed/i.test(html)) problems.push('no YouTube embed');
+      if (/undefined|\[object |NaN/.test(html.replace(/<script[\s\S]*?<\/script>/g, ''))) problems.push('placeholder text in body');
+    } catch (e) { problems.push(`could not re-read post: ${e.message}`); }
+    rows.push({ ...r, score: a?.score, words: a?.words, problems });
+  }
+
+  const ok = rows.filter(r => !r.problems.length);
+  if (!NO_SCHEDULE && ok.length) {
+    const slots = await makeSlots(ok.length);
+    for (let i = 0; i < ok.length; i++) {
+      try {
+        const d = new Date(slots[i]).toISOString().slice(0, 19);
+        await axios.post(`${WP}/posts/${ok[i].post_id}`, { status: 'future', date_gmt: d }, { headers: AUTH, timeout: 30000 });
+        ok[i].scheduled = new Date(slots[i]).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) + ' IST';
+        log(`Scheduled post ${ok[i].post_id} for ${ok[i].scheduled}`);
+      } catch (e) { ok[i].problems.push(`scheduling failed: ${e.response?.data?.message || e.message}`); }
+    }
+  }
+
+  const lines = [`# Daily run ${today}`, '', `Planned ${COUNT}; generated ${made.length}; scheduled ${rows.filter(r => r.scheduled).length}; left as drafts ${rows.filter(r => !r.scheduled).length}; skipped or failed ${results.length - made.length}.`, ''];
+  for (const r of rows) lines.push(`- ${r.scheduled ? `SCHEDULED ${r.scheduled}` : 'DRAFT'} | ${r.title} | post ${r.post_id} | score ${r.score ?? '?'} | ${r.words ?? '?'} words${r.problems.length ? ' | held: ' + r.problems.join(' / ') : ''}`);
+  for (const r of results.filter(x => !x.post_id)) lines.push(`- NOT CREATED | ${r.keyword} | ${r.reason || r.error || r.status}`);
+  fs.mkdirSync(path.join(ROOT, 'reports'), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, 'reports', `${today}.md`), lines.join('\n') + '\n');
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+  console.log('\n' + lines.join('\n'));
+  if (!made.length) throw new Error('no posts were created');
+}
+
+main().catch(e => { console.error('Fatal:', e.message); process.exit(1); });

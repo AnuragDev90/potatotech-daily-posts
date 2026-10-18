@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-10-02T12:36:02.663Z",
+  "summary": {
+    "totalTopics": 1,
+    "topicScoreRange": {
+      "highest": 0.59,
+      "lowest": 0.59
+    },
+    "scoreThreshold": 0.5,
+    "weightings": {
+      "trends": "50%",
+      "reddit": "30%",
+      "specificity": "20%"
+    }
+  },
+  "topics": [
+    {
+      "rank": 1,
+      "keyword": "iPhone 16 battery drain",
+      "score": 0.59,
+      "trend_volume": 85000,
+      "reddit_engagement": 1500,
+      "sources": [
+        "Google Trends",
+        "Reddit (1 posts)"
+      ],
+      "category": "iPhone",
+      "angle": "Battery optimization guide",
+      "subreddits": [
+        "r/iphone"
+      ],
+      "trend_direction": "rising"
+    }
+  ]
+}

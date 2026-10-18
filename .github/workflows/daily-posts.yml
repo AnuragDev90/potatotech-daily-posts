@@ -1,0 +1,51 @@
+name: Daily posts
+
+on:
+  schedule:
+    - cron: '30 1 * * *'   # 07:00 IST every day; posts are scheduled through the day from 10:00 IST
+  workflow_dispatch:
+    inputs:
+      count:
+        description: 'Posts to create (1-6)'
+        default: '5'
+      no_schedule:
+        description: 'Create drafts only, do not schedule'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-posts
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      WORDPRESS_SITE: ${{ secrets.WORDPRESS_SITE }}
+      WORDPRESS_USERNAME: ${{ secrets.WORDPRESS_USERNAME }}
+      WORDPRESS_PASSWORD: ${{ secrets.WORDPRESS_PASSWORD }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+      AMAZON_AFFILIATE_TAG: ${{ secrets.AMAZON_AFFILIATE_TAG }}
+      AMAZON_DOMAIN: ${{ secrets.AMAZON_DOMAIN }}
+      YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+      MIN_SCORE: ${{ vars.MIN_SCORE || '100' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --omit=dev --no-audit --no-fund
+      - name: Create, check and schedule today's posts
+        run: node src/daily-run.js --count=${{ github.event.inputs.count || vars.POSTS_PER_DAY || '5' }} ${{ github.event.inputs.no_schedule == 'true' && '--no-schedule' || '' }}
+      - name: Save registry and report
+        if: always()
+        run: |
+          git config user.name "daily-posts-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add published_registry.json youtube_catalog.json reports || true
+          git diff --cached --quiet || (git commit -m "Daily run $(date -u +%F)" && git pull --rebase && git push)

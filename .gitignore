@@ -1,0 +1,46 @@
+# Environment variables (SENSITIVE - never commit)
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Generated files (auto-created)
+tech_headlines.json
+generated_posts.json
+posting_results.json
+automation.log
+
+# Temporary files
+/tmp/
+*.tmp
+*.log.*
+
+# System files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# IDE
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# Not part of the cloud repo
+*.log
+*.bak*
+dryrun_*.html
+audits/
+daily_topics_*.json
+multi_niche_results.json
+posted_posts.json
+posting_results.json
+generated_posts.json
+*_batch.log
+public/

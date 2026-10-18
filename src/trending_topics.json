@@ -1,0 +1,306 @@
+{
+  "timestamp": "2026-10-02T12:35:59.533Z",
+  "totalCount": 50,
+  "trends": [
+    {
+      "keyword": "iPhone 16 battery drain",
+      "volume": 85000,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 price",
+      "volume": 72000,
+      "category": "Samsung",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16 Pro camera comparison",
+      "volume": 62000,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16  drain camera",
+      "volume": 55705,
+      "category": "iPhone",
+      "trend": "stable"
+    },
+    {
+      "keyword": "iPhone 16  drain comparison",
+      "volume": 55600,
+      "category": "iPhone",
+      "trend": "stable"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 Ultra review",
+      "volume": 55000,
+      "category": "Samsung",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16  drain specs",
+      "volume": 53490,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16  drain tutorial",
+      "volume": 53266,
+      "category": "iPhone",
+      "trend": "declining"
+    },
+    {
+      "keyword": "iPhone 16  drain price",
+      "volume": 52984,
+      "category": "iPhone",
+      "trend": "stable"
+    },
+    {
+      "keyword": "iPhone 16  drain review",
+      "volume": 52964,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16  drain tips",
+      "volume": 52467,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 specs",
+      "volume": 46646,
+      "category": "Samsung",
+      "trend": "stable"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 camera",
+      "volume": 46315,
+      "category": "Samsung",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Google Pixel 10 specs",
+      "volume": 45000,
+      "category": "Pixel",
+      "trend": "stable"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 comparison",
+      "volume": 44921,
+      "category": "Samsung",
+      "trend": "stable"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 review",
+      "volume": 44599,
+      "category": "Samsung",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 tutorial",
+      "volume": 44281,
+      "category": "Samsung",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 tips",
+      "volume": 44010,
+      "category": "Samsung",
+      "trend": "stable"
+    },
+    {
+      "keyword": "Samsung Galaxy S25 battery",
+      "volume": 43639,
+      "category": "Samsung",
+      "trend": "declining"
+    },
+    {
+      "keyword": "Google Pixel 10 price",
+      "volume": 42000,
+      "category": "Pixel",
+      "trend": "stable"
+    },
+    {
+      "keyword": "iPhone 16 Pro  comparison price",
+      "volume": 41498,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16 Pro  comparison review",
+      "volume": 41247,
+      "category": "iPhone",
+      "trend": "stable"
+    },
+    {
+      "keyword": "iPhone 16 Pro  comparison battery",
+      "volume": 40140,
+      "category": "iPhone",
+      "trend": "stable"
+    },
+    {
+      "keyword": "iPhone 16 Pro  comparison specs",
+      "volume": 38653,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16 Pro  comparison tips",
+      "volume": 38073,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "OnePlus 13 release date",
+      "volume": 38000,
+      "category": "OnePlus",
+      "trend": "rising"
+    },
+    {
+      "keyword": "best Android smartphones 2024",
+      "volume": 38000,
+      "category": "Android",
+      "trend": "stable"
+    },
+    {
+      "keyword": "iPhone 16 Pro  comparison tutorial",
+      "volume": 37874,
+      "category": "iPhone",
+      "trend": "stable"
+    },
+    {
+      "keyword": "iPhone 16 5G speed test",
+      "volume": 35000,
+      "category": "iPhone",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Samsung Galaxy battery life",
+      "volume": 32000,
+      "category": "Samsung",
+      "trend": "stable"
+    },
+    {
+      "keyword": "Google Pixel 10 battery",
+      "volume": 31946,
+      "category": "Pixel",
+      "trend": "declining"
+    },
+    {
+      "keyword": "Google Pixel 10 price",
+      "volume": 31833,
+      "category": "Pixel",
+      "trend": "declining"
+    },
+    {
+      "keyword": "Google Pixel 10 camera",
+      "volume": 31511,
+      "category": "Pixel",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Google Pixel 10 review",
+      "volume": 31141,
+      "category": "Pixel",
+      "trend": "declining"
+    },
+    {
+      "keyword": "Google Pixel 10 tutorial",
+      "volume": 29115,
+      "category": "Pixel",
+      "trend": "stable"
+    },
+    {
+      "keyword": "Google Pixel 10 tips",
+      "volume": 29036,
+      "category": "Pixel",
+      "trend": "declining"
+    },
+    {
+      "keyword": "Google Pixel 10 comparison",
+      "volume": 28114,
+      "category": "Pixel",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Google Pixel 10 AI features",
+      "volume": 28000,
+      "category": "Pixel",
+      "trend": "rising"
+    },
+    {
+      "keyword": "OnePlus 13 release date battery",
+      "volume": 27391,
+      "category": "OnePlus",
+      "trend": "declining"
+    },
+    {
+      "keyword": "OnePlus 13 release date tutorial",
+      "volume": 27176,
+      "category": "OnePlus",
+      "trend": "rising"
+    },
+    {
+      "keyword": "OnePlus 13 release date specs",
+      "volume": 26738,
+      "category": "OnePlus",
+      "trend": "rising"
+    },
+    {
+      "keyword": "OnePlus 13 release date review",
+      "volume": 25469,
+      "category": "OnePlus",
+      "trend": "declining"
+    },
+    {
+      "keyword": "OnePlus 13 release date comparison",
+      "volume": 25234,
+      "category": "OnePlus",
+      "trend": "rising"
+    },
+    {
+      "keyword": "OnePlus 13 specifications",
+      "volume": 25000,
+      "category": "OnePlus",
+      "trend": "stable"
+    },
+    {
+      "keyword": "OnePlus 13 release date tips",
+      "volume": 24225,
+      "category": "OnePlus",
+      "trend": "rising"
+    },
+    {
+      "keyword": "OnePlus 13 release date price",
+      "volume": 23180,
+      "category": "OnePlus",
+      "trend": "rising"
+    },
+    {
+      "keyword": "OnePlus 13 release date camera",
+      "volume": 22882,
+      "category": "OnePlus",
+      "trend": "rising"
+    },
+    {
+      "keyword": "iPhone 16 charging speed",
+      "volume": 22000,
+      "category": "iPhone",
+      "trend": "declining"
+    },
+    {
+      "keyword": "Samsung foldable phone specs",
+      "volume": 21000,
+      "category": "Samsung",
+      "trend": "rising"
+    },
+    {
+      "keyword": "Android 15 features",
+      "volume": 19000,
+      "category": "Android",
+      "trend": "stable"
+    }
+  ]
+}
