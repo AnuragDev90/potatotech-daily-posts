@@ -159,6 +159,12 @@ async function main() {
       const html = (await axios.get(`${WP}/posts/${r.post_id}?context=edit`, { headers: AUTH, timeout: 30000 })).data.content.raw;
       if (!/youtube(-nocookie)?\.com\/embed/i.test(html)) problems.push('no YouTube embed');
       if (/undefined|\[object |NaN/.test(html.replace(/<script[\s\S]*?<\/script>/g, ''))) problems.push('placeholder text in body');
+      // every price in the post must appear in the headlines of at least 2 different outlets, otherwise it is held for a human check
+      const src = (topics.find(t => t.keyword === r.keyword) || {}).notes || [];
+      const body = html.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ');
+      const figs = [...new Set((body.match(/(?:₹|Rs\.?\s?|\$)\s?\d[\d,]*(?:\.\d+)?/g) || []).map(x => x.replace(/\D/g, '')).filter(x => x.length >= 3))];
+      const thin = figs.filter(f => new Set(src.filter(n => n.title.replace(/\D/g, '').includes(f)).map(n => n.source)).size < 2);
+      if (thin.length) problems.push(`price figure(s) not confirmed by 2+ outlets: ${thin.slice(0, 4).join(', ')}`);
     } catch (e) { problems.push(`could not re-read post: ${e.message}`); }
     rows.push({ ...r, score: a?.score, words: a?.words, problems });
   }
