@@ -125,6 +125,7 @@ async function makeSlots(n) {
 }
 
 async function main() {
+  if (fs.existsSync(path.join(ROOT, 'reports', `${today}.md`)) && !process.argv.includes('--force') && !DISCOVER_ONLY) { log(`reports/${today}.md already exists: today's run is done, skipping (use --force to run again)`); return; }
   for (const k of ['OPENAI_API_KEY', 'UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} is not set`);
   const todays = pickDesks(COUNT);
   log(`Plan: ${COUNT} posts, desks today: ${todays.join(', ')}; gate: score >= ${MIN_SCORE}, ${MIN_WORDS}+ words, YouTube embed`);
