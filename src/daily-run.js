@@ -199,7 +199,7 @@ async function main() {
     for (let i = 0; i < ok.length; i++) {
       try {
         const d = new Date(slots[i]).toISOString().slice(0, 19);
-        await axios.post(`${WP}/posts/${ok[i].post_id}`, { status: 'future', date_gmt: d }, { headers: AUTH, timeout: 30000 });
+        await axios.post(`${WP}/posts/${ok[i].post_id}`, { status: 'future', date: new Date(slots[i] + 330 * 60000).toISOString().slice(0, 19), date_gmt: d }, { headers: AUTH, timeout: 30000 });
         ok[i].scheduled = new Date(slots[i]).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) + ' IST';
         log(`Scheduled post ${ok[i].post_id} for ${ok[i].scheduled}`);
       } catch (e) { ok[i].problems.push(`scheduling failed: ${e.response?.data?.message || e.message}`); }
