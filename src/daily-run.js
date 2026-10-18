@@ -27,24 +27,30 @@ const MODEL = process.env.MULTI_NICHE_MODEL || 'gpt-4o-mini';
 const log = m => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
 const today = new Date().toISOString().slice(0, 10);
 
+// One post per desk per day; the desks rotate so a 5-6 post day covers most of them and every desk comes up several times a week.
+// niche = the pipeline category (mobile -> Smartphones, tech -> Technology, gpu -> Graphics Cards, gaming -> Gaming, flipkart/amazonsale -> sale pages)
 const DESKS = {
-  mobile: {
-    want: 0, label: 'smartphones launched, leaked or discounted in India',
-    queries: ['smartphone launch India', 'upcoming phones India', 'phone price cut India', 'Samsung Galaxy India launch', 'iPhone India price', 'OnePlus Vivo OPPO Xiaomi realme India launch', 'phone leaks specs']
-  },
-  tech: {
-    want: 0, label: 'Tesla, electric vehicles and consumer tech (gadgets, Apple, chips, software); prefer Tesla/EV stories with an India angle when there are any',
-    queries: ['Tesla', 'Tesla India', 'electric vehicle India launch', 'Apple launch India price', 'new gadget launch India', 'laptop launch India', 'tech India']
-  },
-  offers: {
-    want: 0, label: 'shopping sales and phone/gadget offers in India (Amazon, Flipkart, bank offers, festive sales)',
-    queries: ['Flipkart sale phone offers', 'Amazon Great Indian Festival offers', 'smartphone discount India bank offer', 'Diwali sale deals India phones', 'iPhone price drop Flipkart Amazon']
-  }
+  mobile: { niche: 'mobile', always: true, label: 'new smartphone launches, leaks and price drops in India (any brand)',
+    queries: ['smartphone launch India', 'upcoming phones India', 'phone price cut India', 'Samsung Galaxy India launch', 'OnePlus Vivo OPPO Xiaomi realme India launch', 'phone leaks specs'] },
+  apple: { niche: 'mobile', label: 'Apple products: iPhone, iPad, Mac, Apple Watch, AirPods, iOS updates and Apple India pricing',
+    queries: ['Apple iPhone India', 'iOS update', 'Apple launch India price', 'MacBook iPad Apple Watch news', 'iPhone leak'] },
+  android: { niche: 'mobile', label: 'Android and Google Pixel news: Pixel phones, Android updates, One UI, Samsung and Google software and features',
+    queries: ['Google Pixel', 'Android 17 update', 'One UI update Samsung Galaxy', 'Android news new feature', 'Pixel India price launch'] },
+  gpu: { niche: 'gpu', label: 'graphics cards and PC hardware: Nvidia GeForce RTX, AMD Radeon, Intel Arc, CPUs, prices and launches',
+    queries: ['Nvidia GeForce RTX', 'AMD Radeon GPU', 'Intel Arc graphics card', 'graphics card price India', 'AMD Ryzen Intel Core launch'] },
+  gaming: { niche: 'gaming', label: 'video games and gaming hardware: PlayStation, Xbox, Nintendo, Steam, mobile gaming and BGMI in India',
+    queries: ['video game news', 'PlayStation 5 Xbox news', 'Nintendo Switch 2', 'Steam PC gaming', 'BGMI India', 'GTA 6'] },
+  tech: { niche: 'tech', label: 'Tesla, electric vehicles, AI tools and general consumer tech (gadgets, laptops, chips, software); prefer stories with an India angle',
+    queries: ['Tesla', 'Tesla India', 'electric vehicle India launch', 'new gadget launch India', 'laptop launch India', 'ChatGPT Gemini AI new feature', 'tech India'] },
+  offers: { niche: 'amazonsale', label: 'shopping sales and phone/gadget offers in India (Amazon, Flipkart, bank offers, festive sales)',
+    queries: ['Flipkart sale phone offers', 'Amazon Great Indian Festival offers', 'smartphone discount India bank offer', 'Diwali sale deals India phones', 'iPhone price drop Flipkart Amazon'] }
 };
 
-function splitCount(n) { // offers 1 (2 when n = 6), mobile and tech share the rest
-  const offers = n >= 6 ? 2 : 1, rest = n - offers, mobile = Math.ceil(rest / 2);
-  return { mobile, tech: rest - mobile, offers };
+function pickDesks(n) { // "always" desks first, then the rest rotate by day of the year
+  const names = Object.keys(DESKS), always = names.filter(k => DESKS[k].always), rest = names.filter(k => !DESKS[k].always);
+  const day = Math.floor(Date.now() / 86400000), out = [...always];
+  for (let i = 0; out.length < Math.min(n, names.length); i++) out.push(rest[(day * 2 + i) % rest.length]);
+  return out;
 }
 
 async function chat(messages, maxTokens = 3000) {
@@ -80,13 +86,13 @@ async function discover(desk, want, titles) {
   const list = heads.slice(0, 90).map((h, i) => `${i}. ${h.title} (${h.source}, ${h.date})`).join('\n');
   const out = await chat([
     { role: 'system', content: 'You are an editor choosing article topics from news headlines for an Indian tech blog.' },
-    { role: 'user', content: `Desk: ${DESKS[desk].label}.\nGroup headlines about the SAME specific story or product and propose up to ${want + 2} distinct topics, strongest first (biggest, most searched, useful to readers in India).\nHARD RULES: no politics, crime, celebrity, sports, lawsuits or sensitive health; nothing about named private individuals; every topic needs a genuine India angle (price, availability, offers) or a clear tech angle. Each topic needs at least 4 headlines from at least 2 different outlets. Do not repeat anything already on the site: ${JSON.stringify(titles.slice(0, 120))}\n\n${list}\n\nReturn JSON {"topics":[{"keyword":"2-5 lowercase words an Indian reader would search","niche":"${desk === 'offers' ? 'flipkart or amazonsale' : desk === 'tech' ? 'tech' : 'mobile'}","headline_ids":[...],"angle":"2-3 sentences: what the reader needs to know, and which claims are leaks or unconfirmed"}]}` }
+    { role: 'user', content: `Desk: ${DESKS[desk].label}.\nGroup headlines about the SAME specific story or product and propose up to ${want + 2} distinct topics, strongest first (biggest, most searched, useful to readers in India).\nHARD RULES: no politics, crime, celebrity, sports, lawsuits or sensitive health; nothing about named private individuals; every topic needs a genuine India angle (price, availability, offers) or a clear tech angle. Each topic needs at least 4 headlines from at least 2 different outlets. Do not repeat anything already on the site: ${JSON.stringify(titles.slice(0, 120))}\n\n${list}\n\nReturn JSON {"topics":[{"keyword":"2-5 lowercase words an Indian reader would search","niche":"${desk === 'offers' ? 'flipkart or amazonsale' : DESKS[desk].niche}","headline_ids":[...],"angle":"2-3 sentences: what the reader needs to know, and which claims are leaks or unconfirmed"}]}` }
   ]);
   return (out.topics || []).map(t => {
     const hs = [...new Set(t.headline_ids || [])].map(i => heads[i]).filter(Boolean).slice(0, 8);
     return { t, hs, outlets: new Set(hs.map(h => h.source)).size };
   }).filter(x => x.t.keyword && x.hs.length >= 4 && x.outlets >= 2).slice(0, want).map(({ t, hs }) => ({
-    niche: desk === 'offers' ? (t.niche === 'flipkart' ? 'flipkart' : 'amazonsale') : desk === 'tech' ? 'tech' : 'mobile',
+    niche: desk === 'offers' ? (t.niche === 'flipkart' ? 'flipkart' : 'amazonsale') : DESKS[desk].niche, desk,
     keyword: String(t.keyword).toLowerCase().replace(/\s+/g, ' ').trim(), days: 3,
     queries: [String(t.keyword)],
     notes: hs.map(h => ({ title: h.title, link: h.link, source: h.source })),
@@ -117,11 +123,16 @@ async function makeSlots(n) {
 
 async function main() {
   for (const k of ['OPENAI_API_KEY', 'UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} is not set`);
-  const mix = splitCount(COUNT);
-  log(`Plan: ${COUNT} posts (mobile ${mix.mobile}, tech ${mix.tech}, offers ${mix.offers}); gate: score >= ${MIN_SCORE}, ${MIN_WORDS}+ words, YouTube embed`);
+  const todays = pickDesks(COUNT);
+  log(`Plan: ${COUNT} posts, desks today: ${todays.join(', ')}; gate: score >= ${MIN_SCORE}, ${MIN_WORDS}+ words, YouTube embed`);
   const titles = await existingTitles();
   const topics = [];
-  for (const d of Object.keys(mix)) { try { topics.push(...await discover(d, mix[d], titles)); } catch (e) { log(`${d}: discovery failed: ${e.message}`); } }
+  const backups = Object.keys(DESKS).filter(d => !todays.includes(d));
+  for (const d of [...todays, ...backups]) { // a desk with no usable topic is replaced by the next spare desk
+    if (topics.length >= COUNT) break;
+    if (backups.includes(d) && topics.length >= COUNT) break;
+    try { topics.push(...await discover(d, 1, titles)); } catch (e) { log(`${d}: discovery failed: ${e.message}`); }
+  }
   const toks = k => new Set(k.split(' ').filter(w => w.length > 2 && !['price', 'india', 'launch', 'details', 'features', 'best'].includes(w)));
   for (let i = topics.length - 1; i >= 0; i--) { // drop near-duplicate topics across desks (keep the first)
     const a = toks(topics[i].keyword);
