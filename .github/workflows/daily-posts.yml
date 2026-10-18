@@ -33,6 +33,8 @@ jobs:
       AMAZON_AFFILIATE_TAG: ${{ secrets.AMAZON_AFFILIATE_TAG }}
       AMAZON_DOMAIN: ${{ secrets.AMAZON_DOMAIN }}
       YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+      GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
+      GSC_SITE: ${{ vars.GSC_SITE }}
       MIN_SCORE: ${{ vars.MIN_SCORE || '100' }}
     steps:
       - uses: actions/checkout@v4

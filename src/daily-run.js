@@ -11,6 +11,8 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
 const { fetchNews } = require('./topic-discovery');
+const gsc = require('./gsc');
+let DEMAND = [];   // queries the site already earns impressions for (Search Console), used as a hint when choosing topics
 
 const arg = (n, d) => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3) ?? d;
 const ROOT = path.join(__dirname, '..');
@@ -86,7 +88,8 @@ async function discover(desk, want, titles) {
   const list = heads.slice(0, 90).map((h, i) => `${i}. ${h.title} (${h.source}, ${h.date})`).join('\n');
   const out = await chat([
     { role: 'system', content: 'You are an editor choosing article topics from news headlines for an Indian tech blog.' },
-    { role: 'user', content: `Desk: ${DESKS[desk].label}.\nGroup headlines about the SAME specific story or product and propose up to ${want + 2} distinct topics, strongest first (biggest, most searched, useful to readers in India).\nHARD RULES: no politics, crime, celebrity, sports, lawsuits or sensitive health; nothing about named private individuals; every topic needs a genuine India angle (price, availability, offers) or a clear tech angle. Each topic needs at least 4 headlines from at least 2 different outlets. Do not repeat anything already on the site: ${JSON.stringify(titles.slice(0, 120))}\n\n${list}\n\nReturn JSON {"topics":[{"keyword":"2-5 lowercase words an Indian reader would search","niche":"${desk === 'offers' ? 'flipkart or amazonsale' : DESKS[desk].niche}","headline_ids":[...],"angle":"2-3 sentences: what the reader needs to know, and which claims are leaks or unconfirmed"}]}` }
+    { role: 'user', content: `Desk: ${DESKS[desk].label}.\nGroup headlines about the SAME specific story or product and propose up to ${want + 2} distinct topics, strongest first (biggest, most searched, useful to readers in India).\nHARD RULES: no politics, crime, celebrity, sports, lawsuits or sensitive health; nothing about named private individuals; every topic needs a genuine India angle (price, availability, offers) or a clear tech angle. Each topic needs at least 4 headlines from at least 2 different outlets. Do not repeat anything already on the site: ${JSON.stringify(titles.slice(0, 120))}${DEMAND.length ? `
+Search Console shows readers already find the site for these queries; when a headline group is close to one of them it is a good topic (extend, do not duplicate): ${JSON.stringify(DEMAND.slice(0, 25))}` : ''}\n\n${list}\n\nReturn JSON {"topics":[{"keyword":"2-5 lowercase words an Indian reader would search","niche":"${desk === 'offers' ? 'flipkart or amazonsale' : DESKS[desk].niche}","headline_ids":[...],"angle":"2-3 sentences: what the reader needs to know, and which claims are leaks or unconfirmed"}]}` }
   ]);
   return (out.topics || []).map(t => {
     const hs = [...new Set(t.headline_ids || [])].map(i => heads[i]).filter(Boolean).slice(0, 8);
@@ -126,6 +129,16 @@ async function main() {
   const todays = pickDesks(COUNT);
   log(`Plan: ${COUNT} posts, desks today: ${todays.join(', ')}; gate: score >= ${MIN_SCORE}, ${MIN_WORDS}+ words, YouTube embed`);
   const titles = await existingTitles();
+  let gscNote = 'Search Console: not available this run.';
+  if (process.env.GSC_SERVICE_ACCOUNT_JSON) try {
+    const q = await gsc.query({ days: 28, dimensions: ['query'], rowLimit: 40 });
+    DEMAND = q.filter(r => r.impressions >= 20).map(r => r.keys[0]);
+    const pg = await gsc.query({ days: 28, dimensions: ['page'], rowLimit: 100 });
+    const refresh = pg.filter(r => r.impressions >= 100 && r.position > 10).slice(0, 8);
+    const wk = await gsc.query({ days: 7, dimensions: ['date'], rowLimit: 10 });
+    gscNote = `Search Console (28 days): ${pg.reduce((a, r) => a + r.clicks, 0)} clicks, ${pg.reduce((a, r) => a + r.impressions, 0)} impressions; last 7 days ${wk.reduce((a, r) => a + r.clicks, 0)} clicks. ${refresh.length ? 'Seen but ranking below page 1 (worth refreshing): ' + refresh.map(r => `${r.keys[0].replace(WORDPRESS_SITE, '')} (pos ${r.position.toFixed(0)}, ${r.impressions} imp)`).join('; ') : 'No pages stuck below page 1.'}`;
+    log(gscNote);
+  } catch (e) { gscNote = `Search Console error: ${e.response?.status || ''} ${e.message}`; log(gscNote); }
   const topics = [];
   const backups = Object.keys(DESKS).filter(d => !todays.includes(d));
   for (const d of [...todays, ...backups]) { // a desk with no usable topic is replaced by the next spare desk
@@ -194,6 +207,7 @@ async function main() {
   }
 
   const lines = [`# Daily run ${today}`, '', `Planned ${COUNT}; generated ${made.length}; scheduled ${rows.filter(r => r.scheduled).length}; left as drafts ${rows.filter(r => !r.scheduled).length}; skipped or failed ${results.length - made.length}.`, ''];
+  lines.push(gscNote, '');
   for (const r of rows) lines.push(`- ${r.scheduled ? `SCHEDULED ${r.scheduled}` : 'DRAFT'} | ${r.title} | post ${r.post_id} | score ${r.score ?? '?'} | ${r.words ?? '?'} words${r.problems.length ? ' | held: ' + r.problems.join(' / ') : ''}`);
   for (const r of results.filter(x => !x.post_id)) lines.push(`- NOT CREATED | ${r.keyword} | ${r.reason || r.error || r.status}`);
   fs.mkdirSync(path.join(ROOT, 'reports'), { recursive: true });
