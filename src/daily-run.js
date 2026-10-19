@@ -27,7 +27,7 @@ const WP = `${WORDPRESS_SITE}/wp-json/wp/v2`;
 const AUTH = { Authorization: 'Basic ' + Buffer.from(`${WORDPRESS_USERNAME}:${WORDPRESS_PASSWORD}`).toString('base64') };
 const MODEL = process.env.MULTI_NICHE_MODEL || 'gpt-4o-mini';
 const log = m => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10); // IST date, so the one-run-per-day guard follows the IST day
 
 // One post per desk per day; the desks rotate so a 5-6 post day covers most of them and every desk comes up several times a week.
 // niche = the pipeline category (mobile -> Smartphones, tech -> Technology, gpu -> Graphics Cards, gaming -> Gaming, flipkart/amazonsale -> sale pages)
