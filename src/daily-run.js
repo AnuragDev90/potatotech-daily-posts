@@ -16,7 +16,7 @@ let DEMAND = [];   // queries the site already earns impressions for (Search Con
 
 const arg = (n, d) => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3) ?? d;
 const ROOT = path.join(__dirname, '..');
-const COUNT = Math.min(6, Math.max(1, parseInt(arg('count', process.env.POSTS_PER_DAY || '5'))));
+const COUNT = Math.min(20, Math.max(1, parseInt(arg('count', process.env.POSTS_PER_DAY || '15'))));
 const MIN_SCORE = parseInt(arg('min-score', process.env.MIN_SCORE || '100'));
 const MIN_WORDS = 1500;
 const GAP_MIN = 45;
@@ -96,6 +96,7 @@ Search Console shows readers already find the site for these queries; when a hea
     return { t, hs, outlets: new Set(hs.map(h => h.source)).size };
   }).filter(x => x.t.keyword && x.hs.length >= 4 && x.outlets >= 2).slice(0, want).map(({ t, hs }) => ({
     niche: desk === 'offers' ? (t.niche === 'flipkart' ? 'flipkart' : 'amazonsale') : DESKS[desk].niche, desk,
+    latest: Math.max(0, ...hs.map(h => Date.parse(h.date) || 0)), // newest headline in the group, used to publish the freshest stories first
     keyword: String(t.keyword).toLowerCase().replace(/\s+/g, ' ').trim(), days: 3,
     queries: [String(t.keyword)],
     notes: hs.map(h => ({ title: h.title, link: h.link, source: h.source })),
@@ -114,12 +115,14 @@ async function makeSlots(n) {
   let taken = [];
   try { taken = (await axios.get(`${WP}/posts`, { params: { status: 'future', per_page: 100, _fields: 'date_gmt' }, headers: AUTH })).data.map(p => Date.parse(p.date_gmt + 'Z')); } catch { /* none */ }
   const IST = 330 * 60000, istHour = ms => new Date(ms + IST).getUTCHours() + new Date(ms + IST).getUTCMinutes() / 60;
+  // window 08:00-23:00 IST; spacing shrinks as the count grows (5 posts: 150 min apart, 15 posts: 56 min apart)
+  const step = Math.max(GAP_MIN, Math.min(150, Math.floor(840 / n)));
   let t = Date.now() + 50 * 60000; const slots = [];
-  const nextMorning = ms => { const d = new Date(ms + IST); d.setUTCHours(10, 0, 0, 0); let r = d.getTime() - IST; if (r < ms) r += 86400000; return r; };
+  const nextMorning = ms => { const d = new Date(ms + IST); d.setUTCHours(8, 0, 0, 0); let r = d.getTime() - IST; if (r < ms) r += 86400000; return r; };
   while (slots.length < n) {
-    if (istHour(t) < 10 || istHour(t) >= 23) t = nextMorning(t);
+    if (istHour(t) < 8 || istHour(t) >= 23) t = nextMorning(t);
     if (taken.some(x => Math.abs(x - t) < GAP_MIN * 60000)) { t += GAP_MIN * 60000; continue; }
-    slots.push(t); taken.push(t); t += 150 * 60000;
+    slots.push(t); taken.push(t); t += step * 60000;
   }
   return slots;
 }
@@ -142,11 +145,13 @@ async function main() {
   } catch (e) { gscNote = `Search Console error: ${e.response?.status || ''} ${e.message}`; log(gscNote); }
   const topics = [];
   const backups = Object.keys(DESKS).filter(d => !todays.includes(d));
-  for (const d of [...todays, ...backups]) { // a desk with no usable topic is replaced by the next spare desk
-    if (topics.length >= COUNT) break;
-    if (backups.includes(d) && topics.length >= COUNT) break;
-    try { topics.push(...await discover(d, 1, titles)); } catch (e) { log(`${d}: discovery failed: ${e.message}`); }
+  // Ask every desk for several topics (spread evenly), and gather ~60% more than needed to cover duplicates and posts that fail a gate.
+  const wanted = Math.ceil(COUNT * 1.6), perDesk = Math.max(1, Math.ceil(wanted / Object.keys(DESKS).length));
+  for (const d of [...todays, ...backups]) {
+    try { topics.push(...await discover(d, perDesk, titles)); } catch (e) { log(`${d}: discovery failed: ${e.message}`); }
   }
+  topics.sort((a, b) => (b.latest - a.latest) || (b.notes.length - a.notes.length)); // newest story first
+  if (topics.length > wanted) topics.length = wanted;
   const toks = k => new Set(k.split(' ').filter(w => w.length > 2 && !['price', 'india', 'launch', 'details', 'features', 'best'].includes(w)));
   for (let i = topics.length - 1; i >= 0; i--) { // drop near-duplicate topics across desks (keep the first)
     const a = toks(topics[i].keyword);
@@ -194,7 +199,9 @@ async function main() {
     rows.push({ ...r, score: a?.score, words: a?.words, problems });
   }
 
-  const ok = rows.filter(r => !r.problems.length);
+  const latestOf = r => (topics.find(t => t.keyword === r.keyword) || {}).latest || 0;
+  const ok = rows.filter(r => !r.problems.length).sort((a, b) => latestOf(b) - latestOf(a)); // freshest story gets the earliest slot
+  for (const extra of ok.splice(COUNT)) extra.problems.push(`spare: already have ${COUNT} posts scheduled today`);
   if (!NO_SCHEDULE && ok.length) {
     const slots = await makeSlots(ok.length);
     for (let i = 0; i < ok.length; i++) {
