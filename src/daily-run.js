@@ -16,7 +16,7 @@ let DEMAND = [];   // queries the site already earns impressions for (Search Con
 
 const arg = (n, d) => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3) ?? d;
 const ROOT = path.join(__dirname, '..');
-const COUNT = Math.min(20, Math.max(1, parseInt(arg('count', process.env.POSTS_PER_DAY || '15'))));
+const COUNT = Math.min(20, Math.max(1, parseInt(arg('count', process.env.POSTS_PER_DAY || '8'))));
 const MIN_SCORE = parseInt(arg('min-score', process.env.MIN_SCORE || '100'));
 const MIN_WORDS = 1500;
 const GAP_MIN = 45;

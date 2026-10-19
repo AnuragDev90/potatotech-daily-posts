@@ -17,7 +17,7 @@ on:
     inputs:
       count:
         description: 'Posts to create (1-20)'
-        default: '15'
+        default: '8'
       no_schedule:
         description: 'Create drafts only, do not schedule'
         type: boolean
@@ -53,7 +53,7 @@ jobs:
           node-version: 20
       - run: npm install --omit=dev --no-audit --no-fund
       - name: Create, check and schedule today's posts
-        run: node src/daily-run.js --count=${{ github.event.inputs.count || vars.POSTS_PER_DAY || '15' }} ${{ github.event.inputs.no_schedule == 'true' && '--no-schedule' || '' }} ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+        run: node src/daily-run.js --count=${{ github.event.inputs.count || vars.POSTS_PER_DAY || '8' }} ${{ github.event.inputs.no_schedule == 'true' && '--no-schedule' || '' }} ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
       - name: Save registry and report
         if: always()
         run: |
