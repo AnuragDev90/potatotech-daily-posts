@@ -20,7 +20,7 @@ const COUNT = Math.min(20, Math.max(1, parseInt(arg('count', process.env.POSTS_P
 const MIN_SCORE = parseInt(arg('min-score', process.env.MIN_SCORE || '100'));
 const MIN_WORDS = 1500;
 const GAP_MIN = 45;
-const NO_SCHEDULE = process.argv.includes('--no-schedule');
+const NO_SCHEDULE = process.argv.includes('--no-schedule') || process.env.DRAFT_ONLY === '1'; // DRAFT_ONLY=1 (repo variable) keeps every post as a draft
 const DISCOVER_ONLY = process.argv.includes('--discover-only');
 const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, OPENAI_API_KEY } = process.env;
 const WP = `${WORDPRESS_SITE}/wp-json/wp/v2`;

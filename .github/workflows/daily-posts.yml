@@ -46,6 +46,7 @@ jobs:
       GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
       GSC_SITE: ${{ vars.GSC_SITE }}
       MIN_SCORE: ${{ vars.MIN_SCORE || '100' }}
+      DRAFT_ONLY: ${{ vars.DRAFT_ONLY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
