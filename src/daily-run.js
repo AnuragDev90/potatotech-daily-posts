@@ -77,6 +77,9 @@ async function existingTitles() {
   return out;
 }
 
+const GENERIC = new Set(['price', 'india', 'launch', 'details', 'features', 'best', 'review', 'news', 'update', 'release', 'date', 'specs', 'with', 'for', 'the', 'and']);
+const tokens = s => new Set(String(s).toLowerCase().replace(/&#?\w+;/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !GENERIC.has(w)));
+
 async function discover(desk, want, titles) {
   const seen = new Set(), heads = [];
   for (const q of DESKS[desk].queries) for (const n of await fetchNews(q, 3, 12)) {
@@ -88,13 +91,16 @@ async function discover(desk, want, titles) {
   const list = heads.slice(0, 90).map((h, i) => `${i}. ${h.title} (${h.source}, ${h.date})`).join('\n');
   const out = await chat([
     { role: 'system', content: 'You are an editor choosing article topics from news headlines for an Indian tech blog.' },
-    { role: 'user', content: `Desk: ${DESKS[desk].label}.\nGroup headlines about the SAME specific story or product and propose up to ${want + 2} distinct topics, strongest first (biggest, most searched, useful to readers in India).\nHARD RULES: no politics, crime, celebrity, sports, lawsuits or sensitive health; nothing about named private individuals; every topic needs a genuine India angle (price, availability, offers) or a clear tech angle. Each topic needs at least 4 headlines from at least 2 different outlets. Do not repeat anything already on the site: ${JSON.stringify(titles.slice(0, 120))}${DEMAND.length ? `
+    { role: 'user', content: `Desk: ${DESKS[desk].label}.\nGroup headlines about the SAME specific story or product and propose up to ${want + 6} distinct topics, strongest first (biggest, most searched, useful to readers in India).\nHARD RULES: no politics, crime, celebrity, sports, lawsuits or sensitive health; nothing about named private individuals; every topic needs a genuine India angle (price, availability, offers) or a clear tech angle. Each topic needs at least 4 headlines from at least 2 different outlets. Do not repeat anything already on the site: ${JSON.stringify(titles.slice(0, 250))}${DEMAND.length ? `
 Search Console shows readers already find the site for these queries; when a headline group is close to one of them it is a good topic (extend, do not duplicate): ${JSON.stringify(DEMAND.slice(0, 25))}` : ''}\n\n${list}\n\nReturn JSON {"topics":[{"keyword":"2-5 lowercase words an Indian reader would search","niche":"${desk === 'offers' ? 'flipkart or amazonsale' : DESKS[desk].niche}","headline_ids":[...],"angle":"2-3 sentences: what the reader needs to know, and which claims are leaks or unconfirmed"}]}` }
   ]);
   return (out.topics || []).map(t => {
     const hs = [...new Set(t.headline_ids || [])].map(i => heads[i]).filter(Boolean).slice(0, 8);
     return { t, hs, outlets: new Set(hs.map(h => h.source)).size };
-  }).filter(x => x.t.keyword && x.hs.length >= 4 && x.outlets >= 2).slice(0, want).map(({ t, hs }) => ({
+  }).filter(x => x.t.keyword && x.hs.length >= 4 && x.outlets >= 2).filter(x => { // skip stories the site already covers (the pipeline would reject them later anyway)
+    const kw = tokens(x.t.keyword); if (kw.size < 2) return true;
+    return !titles.some(t => { const tt = tokens(t); return [...kw].filter(w => tt.has(w)).length >= Math.ceil(kw.size * 0.75); });
+  }).slice(0, want).map(({ t, hs }) => ({
     niche: desk === 'offers' ? (t.niche === 'flipkart' ? 'flipkart' : 'amazonsale') : DESKS[desk].niche, desk,
     latest: Math.max(0, ...hs.map(h => Date.parse(h.date) || 0)), // newest headline in the group, used to publish the freshest stories first
     keyword: String(t.keyword).toLowerCase().replace(/\s+/g, ' ').trim(), days: 3,
