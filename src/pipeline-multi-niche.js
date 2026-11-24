@@ -22,8 +22,9 @@ const MIX = parseMix(arg('mix', 'ai:2,gpu:2,gaming:1'));          // trending / 
 const TOPICS_FILE = arg('topics-file', '');                        // fixed topics: JSON [{keyword, angle, notes[]}] (skips discovery)
 const EVERGREEN = parseMix(arg('evergreen', ''));                  // evergreen articles per niche (run after the trending ones)
 
-const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, OPENAI_API_KEY, UNSPLASH_ACCESS_KEY } = process.env;
-const MODEL = process.env.MULTI_NICHE_MODEL || 'gpt-4o-mini'; // deliberately not OPENAI_MODEL: this pipeline is pinned to gpt-4o-mini
+const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, UNSPLASH_ACCESS_KEY } = process.env;
+const { chat, USAGE, sleep, PROVIDER } = require('./ai-client');
+const { voiceBlock } = require('./voice');
 const WP = `${WORDPRESS_SITE}/wp-json/wp/v2`;
 const WP_AUTH = { Authorization: 'Basic ' + Buffer.from(`${WORDPRESS_USERNAME}:${WORDPRESS_PASSWORD}`).toString('base64') };
 const ROOT = path.join(__dirname, '..');
@@ -77,30 +78,8 @@ const NICHES = {
 };
 
 const log = m => console.log(`[${new Date().toTimeString().slice(0, 8)}] ${m}`);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TODAY = new Date().toISOString().slice(0, 10);
 const AUDIENCE = process.env.MULTI_NICHE_AUDIENCE || 'tech fans, PC builders and gamers in India';
-
-// ─────────────────────────── OpenAI (gpt-4o-mini) ───────────────────────────
-const USAGE = { calls: 0, prompt: 0, completion: 0 };
-async function chat(messages, { json = false, maxTokens = 1200, temperature = 0.7 } = {}) {
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    try {
-      const r = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: MODEL, messages, temperature, max_tokens: maxTokens,
-        ...(json ? { response_format: { type: 'json_object' } } : {})
-      }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, timeout: 120000 });
-      USAGE.calls++; USAGE.prompt += r.data.usage?.prompt_tokens || 0; USAGE.completion += r.data.usage?.completion_tokens || 0;
-      return r.data.choices[0].message.content.trim();
-    } catch (e) {
-      const err = e.response?.data?.error;
-      if (err?.type === 'insufficient_quota') throw new Error('OpenAI account has no credits');
-      const retryable = [429, 500, 502, 503].includes(e.response?.status) || e.code === 'ECONNABORTED';
-      if (!retryable || attempt === 4) throw new Error(err?.message || e.message);
-      await sleep(attempt * 5000);
-    }
-  }
-}
 
 // ─────────────────────────── Voice, de-AI, fact check ───────────────────────────
 const AI_PHRASES = [
@@ -157,7 +136,7 @@ ${evergreen
     : '- Do not write step-by-step instructions, install or settings advice, or how-to sections unless the reporting itself describes those steps. Avoid "how to" headings; prefer headings about what happened, what it means for readers in India, and what is still unknown.'}
 - Never promise or imply guaranteed income. No earnings figures unless the reporting gives them; say results vary and depend on skill, effort and demand. Do not present any method as passive, easy or risk-free.
 - Avoid vague hype such as "a big step forward" or "significant improvements" unless the reporting says it.
-- If something is a leak, rumour or company claim, say so once ("reportedly", "the company says") instead of hedging every sentence.`;
+- If something is a leak, rumour or company claim, say so once ("reportedly", "the company says") instead of hedging every sentence.${voiceBlock()}`;
 
 let EVERGREEN_MODE = false; // set per job in main(); evergreen articles get how-to/explainer rules
 const sysMsg = () => ({ role: 'system', content: buildSystem(EVERGREEN_MODE) });
@@ -549,8 +528,8 @@ async function getOrCreateTerm(taxonomy, name) {
 // ─────────────────────────── Main ───────────────────────────
 async function main() {
   const total = [...Object.values(MIX), ...Object.values(EVERGREEN)].reduce((a, b) => a + b, 0);
-  console.log(`\nMulti-niche pipeline: ${total} articles (${Object.entries(MIX).map(([k, v]) => `${k}:${v}`).join(', ')}) | status=${STATUS}${DRY_RUN ? ' | DRY RUN (nothing sent to WordPress)' : ''} | model=${MODEL} | images=Unsplash only\n`);
-  for (const k of ['OPENAI_API_KEY', 'UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} missing in .env`);
+  console.log(`\nMulti-niche pipeline: ${total} articles (${Object.entries(MIX).map(([k, v]) => `${k}:${v}`).join(', ')}) | status=${STATUS}${DRY_RUN ? ' | DRY RUN (nothing sent to WordPress)' : ''} | ai=${PROVIDER}/${require('./ai-client').MODEL} | images=Unsplash only\n`);
+  for (const k of ['UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} missing in .env`);
   for (const k of [...Object.keys(MIX), ...Object.keys(EVERGREEN)]) if (!NICHES[k]) throw new Error(`unknown niche "${k}" (use ai, gpu, gaming)`);
 
   const registry = loadRegistry();
@@ -699,10 +678,9 @@ async function main() {
   }
 
   fs.writeFileSync(path.join(ROOT, 'multi_niche_results.json'), JSON.stringify(results, null, 2));
-  const cost = USAGE.prompt / 1e6 * 0.15 + USAGE.completion / 1e6 * 0.60; // gpt-4o-mini list prices
   console.log('\n' + '═'.repeat(70));
   results.forEach(r => console.log(`${{ skipped: '⏭️ ', error: '❌', 'dry-run': '🧪' }[r.status] || '✅'} [${r.niche}/${r.kind || '-'}] ${r.keyword} | ${r.words ?? '-'} words | ${r.link || r.reason || r.error || r.status}`));
-  console.log(`\n${USAGE.calls} OpenAI calls | ${USAGE.prompt} in / ${USAGE.completion} out tokens | ~$${cost.toFixed(3)} (${MODEL})`);
+  console.log(`\n${USAGE.calls} ${PROVIDER} calls | ${USAGE.prompt} in / ${USAGE.completion} out tokens (${require('./ai-client').MODEL})`);
 }
 
 if (require.main === module) main().catch(e => { console.error('Fatal:', e.message); process.exit(1); });

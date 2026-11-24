@@ -22,10 +22,10 @@ const MIN_WORDS = 1500;
 const GAP_MIN = 45;
 const NO_SCHEDULE = process.argv.includes('--no-schedule') || process.env.DRAFT_ONLY === '1'; // DRAFT_ONLY=1 (repo variable) keeps every post as a draft
 const DISCOVER_ONLY = process.argv.includes('--discover-only');
-const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, OPENAI_API_KEY } = process.env;
+const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD } = process.env;
+const ai = require('./ai-client');
 const WP = `${WORDPRESS_SITE}/wp-json/wp/v2`;
 const AUTH = { Authorization: 'Basic ' + Buffer.from(`${WORDPRESS_USERNAME}:${WORDPRESS_PASSWORD}`).toString('base64') };
-const MODEL = process.env.MULTI_NICHE_MODEL || 'gpt-4o-mini';
 const log = m => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
 const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10); // IST date, so the one-run-per-day guard follows the IST day
 
@@ -56,13 +56,7 @@ function pickDesks(n) { // "always" desks first, then the rest rotate by day of 
 }
 
 async function chat(messages, maxTokens = 3000) {
-  for (let i = 1; i <= 3; i++) {
-    try {
-      const r = await axios.post('https://api.openai.com/v1/chat/completions', { model: MODEL, messages, temperature: 0.3, max_tokens: maxTokens, response_format: { type: 'json_object' } },
-        { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, timeout: 120000 });
-      return JSON.parse(r.data.choices[0].message.content);
-    } catch (e) { if (i === 3) throw e; await new Promise(r => setTimeout(r, 4000 * i)); }
-  }
+  return JSON.parse(await ai.chat(messages, { json: true, maxTokens, temperature: 0.3 })); // retries live in ai-client
 }
 
 async function existingTitles() {
@@ -135,7 +129,7 @@ async function makeSlots(n) {
 
 async function main() {
   if (fs.existsSync(path.join(ROOT, 'reports', `${today}.md`)) && !process.argv.includes('--force') && !DISCOVER_ONLY) { log(`reports/${today}.md already exists: today's run is done, skipping (use --force to run again)`); return; }
-  for (const k of ['OPENAI_API_KEY', 'UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} is not set`);
+  for (const k of ['UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} is not set`);
   const todays = pickDesks(COUNT);
   log(`Plan: ${COUNT} posts, desks today: ${todays.join(', ')}; gate: score >= ${MIN_SCORE}, ${MIN_WORDS}+ words, YouTube embed`);
   const titles = await existingTitles();
