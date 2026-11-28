@@ -25,6 +25,7 @@ const EVERGREEN = parseMix(arg('evergreen', ''));                  // evergreen 
 const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, UNSPLASH_ACCESS_KEY } = process.env;
 const { chat, USAGE, sleep, PROVIDER } = require('./ai-client');
 const { voiceBlock } = require('./voice');
+const { findCommonsPhotos } = require('./commons-images');
 const WP = `${WORDPRESS_SITE}/wp-json/wp/v2`;
 const WP_AUTH = { Authorization: 'Basic ' + Buffer.from(`${WORDPRESS_USERNAME}:${WORDPRESS_PASSWORD}`).toString('base64') };
 const ROOT = path.join(__dirname, '..');
@@ -440,7 +441,8 @@ function buildHtml({ meta, intro, bodies, faq, conclusion, related, photo, affil
   parts.push(channelVideos.length ? yt.channelBlockHtml(channelVideos) : yt.ctaHtml()); // no topic match: embed the channel's top video + Short; channel link always present
   if (related.length) parts.push('<h2>Related reading</h2>', '<ul>' + related.map(p => `<li><a href="${esc(p.link)}">${esc(p.title)}</a></li>`).join('') + '</ul>');
   if (sources) parts.push(sources);
-  if (photo) parts.push(`<p><em>Featured photo by <a href="${esc(photo.user_url)}?utm_source=potatotech&utm_medium=referral">${esc(photo.user)}</a> on <a href="https://unsplash.com/?utm_source=potatotech&utm_medium=referral">Unsplash</a></em></p>`);
+  if (photo?.credit_html) parts.push(`<p><em>${photo.credit_html}</em></p>`);
+  else if (photo) parts.push(`<p><em>Featured photo by <a href="${esc(photo.user_url)}?utm_source=potatotech&utm_medium=referral">${esc(photo.user)}</a> on <a href="https://unsplash.com/?utm_source=potatotech&utm_medium=referral">Unsplash</a></em></p>`);
   if (schema) parts.push(`<script type="application/ld+json">${JSON.stringify(schema)}</script>`);
   return parts.join('\n');
 }
@@ -498,14 +500,14 @@ async function findPhotos(queries, usedIds, keyword, n = 2) {
 }
 
 async function uploadPhoto(photo, keyword, title) {
-  await axios.get(photo.download_location, { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` }, timeout: 20000 }).catch(() => {}); // Unsplash API guideline
-  const img = await axios.get(photo.url, { responseType: 'arraybuffer', timeout: 60000 });
-  if (!String(img.headers['content-type']).startsWith('image/') || img.data.length < 5000) throw new Error('Unsplash image download invalid');
+  if (photo.download_location) await axios.get(photo.download_location, { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` }, timeout: 20000 }).catch(() => {}); // Unsplash API guideline
+  const img = await axios.get(photo.url, { responseType: 'arraybuffer', timeout: 60000, headers: { 'User-Agent': 'PotatoTechBot/1.0 (https://potatotech.in)' } });
+  if (!String(img.headers['content-type']).startsWith('image/') || img.data.length < 5000) throw new Error('image download invalid');
   const form = new FormData();
   form.append('file', Buffer.from(img.data), { filename: `${norm(keyword).replace(/ /g, '-')}.jpg`, contentType: 'image/jpeg' });
   const up = await axios.post(`${WP}/media`, form, { headers: { ...form.getHeaders(), ...WP_AUTH }, timeout: 90000, maxBodyLength: Infinity });
   const alt = String(photo.alt).charAt(0).toUpperCase() + String(photo.alt).slice(1, 120);
-  await axios.post(`${WP}/media/${up.data.id}`, { alt_text: alt, title, caption: `Photo by ${photo.user} on Unsplash` }, { headers: WP_AUTH, timeout: 30000 });
+  await axios.post(`${WP}/media/${up.data.id}`, { alt_text: alt, title, caption: photo.credit_text || `Photo by ${photo.user} on Unsplash` }, { headers: WP_AUTH, timeout: 30000 });
   return { id: up.data.id, source_url: up.data.source_url };
 }
 
@@ -528,7 +530,7 @@ async function getOrCreateTerm(taxonomy, name) {
 // ─────────────────────────── Main ───────────────────────────
 async function main() {
   const total = [...Object.values(MIX), ...Object.values(EVERGREEN)].reduce((a, b) => a + b, 0);
-  console.log(`\nMulti-niche pipeline: ${total} articles (${Object.entries(MIX).map(([k, v]) => `${k}:${v}`).join(', ')}) | status=${STATUS}${DRY_RUN ? ' | DRY RUN (nothing sent to WordPress)' : ''} | ai=${PROVIDER}/${require('./ai-client').MODEL} | images=Unsplash only\n`);
+  console.log(`\nMulti-niche pipeline: ${total} articles (${Object.entries(MIX).map(([k, v]) => `${k}:${v}`).join(', ')}) | status=${STATUS}${DRY_RUN ? ' | DRY RUN (nothing sent to WordPress)' : ''} | ai=${PROVIDER}/${require('./ai-client').MODEL} | images=Wikimedia Commons (real photos, credited) then Unsplash\n`);
   for (const k of ['UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} missing in .env`);
   for (const k of [...Object.keys(MIX), ...Object.keys(EVERGREEN)]) if (!NICHES[k]) throw new Error(`unknown niche "${k}" (use ai, gpu, gaming)`);
 
@@ -613,9 +615,12 @@ async function main() {
         const faq = await writeFaq(meta, keyword, news);
         const conclusion = await writeSection('conclusion', meta, keyword, PLAN.conclusion, null, written, news);
 
-        const photos = await findPhotos([meta.image_query, ...NICHES[niche].image], registry.unsplash_ids, keyword, 2);
+        // Real product photos first (Wikimedia Commons, freely licensed, credited); generic Unsplash stock only when none match the product
+        let photos = await findCommonsPhotos([meta.image_query, keyword, meta.title], registry.unsplash_ids, 2);
+        log(`   🖼️  ${photos.length ? `${photos.length} real photo(s) from Wikimedia Commons` : 'no Commons photo for this product; using Unsplash stock'}`);
+        if (!photos.length) photos = await findPhotos([meta.image_query, ...NICHES[niche].image], registry.unsplash_ids, keyword, 2);
         const photo = photos[0];
-        if (!photo) throw new Error('no Unsplash photo found');
+        if (!photo) throw new Error('no photo found');
         const photo2 = photos[1] || null;
 
         const related = internalLinks(wpPosts, keyword);
