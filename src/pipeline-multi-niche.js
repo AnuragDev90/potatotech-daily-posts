@@ -22,8 +22,10 @@ const MIX = parseMix(arg('mix', 'ai:2,gpu:2,gaming:1'));          // trending / 
 const TOPICS_FILE = arg('topics-file', '');                        // fixed topics: JSON [{keyword, angle, notes[]}] (skips discovery)
 const EVERGREEN = parseMix(arg('evergreen', ''));                  // evergreen articles per niche (run after the trending ones)
 
-const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, OPENAI_API_KEY, UNSPLASH_ACCESS_KEY } = process.env;
-const MODEL = process.env.MULTI_NICHE_MODEL || 'gpt-4o-mini'; // deliberately not OPENAI_MODEL: this pipeline is pinned to gpt-4o-mini
+const { WORDPRESS_SITE, WORDPRESS_USERNAME, WORDPRESS_PASSWORD, UNSPLASH_ACCESS_KEY } = process.env;
+const { chat, USAGE, sleep, PROVIDER } = require('./ai-client');
+const { voiceBlock } = require('./voice');
+const { findCommonsPhotos } = require('./commons-images');
 const WP = `${WORDPRESS_SITE}/wp-json/wp/v2`;
 const WP_AUTH = { Authorization: 'Basic ' + Buffer.from(`${WORDPRESS_USERNAME}:${WORDPRESS_PASSWORD}`).toString('base64') };
 const ROOT = path.join(__dirname, '..');
@@ -77,30 +79,8 @@ const NICHES = {
 };
 
 const log = m => console.log(`[${new Date().toTimeString().slice(0, 8)}] ${m}`);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TODAY = new Date().toISOString().slice(0, 10);
 const AUDIENCE = process.env.MULTI_NICHE_AUDIENCE || 'tech fans, PC builders and gamers in India';
-
-// ─────────────────────────── OpenAI (gpt-4o-mini) ───────────────────────────
-const USAGE = { calls: 0, prompt: 0, completion: 0 };
-async function chat(messages, { json = false, maxTokens = 1200, temperature = 0.7 } = {}) {
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    try {
-      const r = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: MODEL, messages, temperature, max_tokens: maxTokens,
-        ...(json ? { response_format: { type: 'json_object' } } : {})
-      }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, timeout: 120000 });
-      USAGE.calls++; USAGE.prompt += r.data.usage?.prompt_tokens || 0; USAGE.completion += r.data.usage?.completion_tokens || 0;
-      return r.data.choices[0].message.content.trim();
-    } catch (e) {
-      const err = e.response?.data?.error;
-      if (err?.type === 'insufficient_quota') throw new Error('OpenAI account has no credits');
-      const retryable = [429, 500, 502, 503].includes(e.response?.status) || e.code === 'ECONNABORTED';
-      if (!retryable || attempt === 4) throw new Error(err?.message || e.message);
-      await sleep(attempt * 5000);
-    }
-  }
-}
 
 // ─────────────────────────── Voice, de-AI, fact check ───────────────────────────
 const AI_PHRASES = [
@@ -157,7 +137,7 @@ ${evergreen
     : '- Do not write step-by-step instructions, install or settings advice, or how-to sections unless the reporting itself describes those steps. Avoid "how to" headings; prefer headings about what happened, what it means for readers in India, and what is still unknown.'}
 - Never promise or imply guaranteed income. No earnings figures unless the reporting gives them; say results vary and depend on skill, effort and demand. Do not present any method as passive, easy or risk-free.
 - Avoid vague hype such as "a big step forward" or "significant improvements" unless the reporting says it.
-- If something is a leak, rumour or company claim, say so once ("reportedly", "the company says") instead of hedging every sentence.`;
+- If something is a leak, rumour or company claim, say so once ("reportedly", "the company says") instead of hedging every sentence.${voiceBlock()}`;
 
 let EVERGREEN_MODE = false; // set per job in main(); evergreen articles get how-to/explainer rules
 const sysMsg = () => ({ role: 'system', content: buildSystem(EVERGREEN_MODE) });
@@ -461,7 +441,8 @@ function buildHtml({ meta, intro, bodies, faq, conclusion, related, photo, affil
   parts.push(channelVideos.length ? yt.channelBlockHtml(channelVideos) : yt.ctaHtml()); // no topic match: embed the channel's top video + Short; channel link always present
   if (related.length) parts.push('<h2>Related reading</h2>', '<ul>' + related.map(p => `<li><a href="${esc(p.link)}">${esc(p.title)}</a></li>`).join('') + '</ul>');
   if (sources) parts.push(sources);
-  if (photo) parts.push(`<p><em>Featured photo by <a href="${esc(photo.user_url)}?utm_source=potatotech&utm_medium=referral">${esc(photo.user)}</a> on <a href="https://unsplash.com/?utm_source=potatotech&utm_medium=referral">Unsplash</a></em></p>`);
+  if (photo?.credit_html) parts.push(`<p><em>${photo.credit_html}</em></p>`);
+  else if (photo) parts.push(`<p><em>Featured photo by <a href="${esc(photo.user_url)}?utm_source=potatotech&utm_medium=referral">${esc(photo.user)}</a> on <a href="https://unsplash.com/?utm_source=potatotech&utm_medium=referral">Unsplash</a></em></p>`);
   if (schema) parts.push(`<script type="application/ld+json">${JSON.stringify(schema)}</script>`);
   return parts.join('\n');
 }
@@ -519,14 +500,14 @@ async function findPhotos(queries, usedIds, keyword, n = 2) {
 }
 
 async function uploadPhoto(photo, keyword, title) {
-  await axios.get(photo.download_location, { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` }, timeout: 20000 }).catch(() => {}); // Unsplash API guideline
-  const img = await axios.get(photo.url, { responseType: 'arraybuffer', timeout: 60000 });
-  if (!String(img.headers['content-type']).startsWith('image/') || img.data.length < 5000) throw new Error('Unsplash image download invalid');
+  if (photo.download_location) await axios.get(photo.download_location, { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` }, timeout: 20000 }).catch(() => {}); // Unsplash API guideline
+  const img = await axios.get(photo.url, { responseType: 'arraybuffer', timeout: 60000, headers: { 'User-Agent': 'PotatoTechBot/1.0 (https://potatotech.in)' } });
+  if (!String(img.headers['content-type']).startsWith('image/') || img.data.length < 5000) throw new Error('image download invalid');
   const form = new FormData();
   form.append('file', Buffer.from(img.data), { filename: `${norm(keyword).replace(/ /g, '-')}.jpg`, contentType: 'image/jpeg' });
   const up = await axios.post(`${WP}/media`, form, { headers: { ...form.getHeaders(), ...WP_AUTH }, timeout: 90000, maxBodyLength: Infinity });
   const alt = String(photo.alt).charAt(0).toUpperCase() + String(photo.alt).slice(1, 120);
-  await axios.post(`${WP}/media/${up.data.id}`, { alt_text: alt, title, caption: `Photo by ${photo.user} on Unsplash` }, { headers: WP_AUTH, timeout: 30000 });
+  await axios.post(`${WP}/media/${up.data.id}`, { alt_text: alt, title, caption: photo.credit_text || `Photo by ${photo.user} on Unsplash` }, { headers: WP_AUTH, timeout: 30000 });
   return { id: up.data.id, source_url: up.data.source_url };
 }
 
@@ -549,8 +530,8 @@ async function getOrCreateTerm(taxonomy, name) {
 // ─────────────────────────── Main ───────────────────────────
 async function main() {
   const total = [...Object.values(MIX), ...Object.values(EVERGREEN)].reduce((a, b) => a + b, 0);
-  console.log(`\nMulti-niche pipeline: ${total} articles (${Object.entries(MIX).map(([k, v]) => `${k}:${v}`).join(', ')}) | status=${STATUS}${DRY_RUN ? ' | DRY RUN (nothing sent to WordPress)' : ''} | model=${MODEL} | images=Unsplash only\n`);
-  for (const k of ['OPENAI_API_KEY', 'UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} missing in .env`);
+  console.log(`\nMulti-niche pipeline: ${total} articles (${Object.entries(MIX).map(([k, v]) => `${k}:${v}`).join(', ')}) | status=${STATUS}${DRY_RUN ? ' | DRY RUN (nothing sent to WordPress)' : ''} | ai=${PROVIDER}/${require('./ai-client').MODEL} | images=Wikimedia Commons (real photos, credited) then Unsplash\n`);
+  for (const k of ['UNSPLASH_ACCESS_KEY', 'WORDPRESS_SITE', 'WORDPRESS_USERNAME', 'WORDPRESS_PASSWORD']) if (!process.env[k]) throw new Error(`${k} missing in .env`);
   for (const k of [...Object.keys(MIX), ...Object.keys(EVERGREEN)]) if (!NICHES[k]) throw new Error(`unknown niche "${k}" (use ai, gpu, gaming)`);
 
   const registry = loadRegistry();
@@ -634,9 +615,12 @@ async function main() {
         const faq = await writeFaq(meta, keyword, news);
         const conclusion = await writeSection('conclusion', meta, keyword, PLAN.conclusion, null, written, news);
 
-        const photos = await findPhotos([meta.image_query, ...NICHES[niche].image], registry.unsplash_ids, keyword, 2);
+        // Real product photos first (Wikimedia Commons, freely licensed, credited); generic Unsplash stock only when none match the product
+        let photos = await findCommonsPhotos([meta.image_query, keyword, meta.title], registry.unsplash_ids, 2);
+        log(`   🖼️  ${photos.length ? `${photos.length} real photo(s) from Wikimedia Commons` : 'no Commons photo for this product; using Unsplash stock'}`);
+        if (!photos.length) photos = await findPhotos([meta.image_query, ...NICHES[niche].image], registry.unsplash_ids, keyword, 2);
         const photo = photos[0];
-        if (!photo) throw new Error('no Unsplash photo found');
+        if (!photo) throw new Error('no photo found');
         const photo2 = photos[1] || null;
 
         const related = internalLinks(wpPosts, keyword);
@@ -699,10 +683,9 @@ async function main() {
   }
 
   fs.writeFileSync(path.join(ROOT, 'multi_niche_results.json'), JSON.stringify(results, null, 2));
-  const cost = USAGE.prompt / 1e6 * 0.15 + USAGE.completion / 1e6 * 0.60; // gpt-4o-mini list prices
   console.log('\n' + '═'.repeat(70));
   results.forEach(r => console.log(`${{ skipped: '⏭️ ', error: '❌', 'dry-run': '🧪' }[r.status] || '✅'} [${r.niche}/${r.kind || '-'}] ${r.keyword} | ${r.words ?? '-'} words | ${r.link || r.reason || r.error || r.status}`));
-  console.log(`\n${USAGE.calls} OpenAI calls | ${USAGE.prompt} in / ${USAGE.completion} out tokens | ~$${cost.toFixed(3)} (${MODEL})`);
+  console.log(`\n${USAGE.calls} ${PROVIDER} calls | ${USAGE.prompt} in / ${USAGE.completion} out tokens (${require('./ai-client').MODEL})`);
 }
 
 if (require.main === module) main().catch(e => { console.error('Fatal:', e.message); process.exit(1); });

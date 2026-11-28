@@ -56,6 +56,7 @@ function sourcesHtml(news) {
 function figureHtml(media, photo) {
   if (!media || !photo) return '';
   const alt = String(photo.alt || '').charAt(0).toUpperCase() + String(photo.alt || '').slice(1, 120);
+  if (photo.credit_html) return `<figure class="wp-block-image size-large"><img src="${esc(media.source_url)}" alt="${esc(alt)}" loading="lazy"/><figcaption>${photo.credit_html}</figcaption></figure>`;
   return `<figure class="wp-block-image size-large"><img src="${esc(media.source_url)}" alt="${esc(alt)}" loading="lazy"/>` +
     `<figcaption>Photo by <a href="${esc(photo.user_url)}?utm_source=potatotech&amp;utm_medium=referral">${esc(photo.user)}</a> on <a href="https://unsplash.com/?utm_source=potatotech&amp;utm_medium=referral">Unsplash</a></figcaption></figure>`;
 }

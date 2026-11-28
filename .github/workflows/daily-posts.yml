@@ -38,7 +38,11 @@ jobs:
       WORDPRESS_SITE: ${{ secrets.WORDPRESS_SITE }}
       WORDPRESS_USERNAME: ${{ secrets.WORDPRESS_USERNAME }}
       WORDPRESS_PASSWORD: ${{ secrets.WORDPRESS_PASSWORD }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+      AI_MODEL: ${{ vars.AI_MODEL }}
       UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
       AMAZON_AFFILIATE_TAG: ${{ secrets.AMAZON_AFFILIATE_TAG }}
       AMAZON_DOMAIN: ${{ secrets.AMAZON_DOMAIN }}
